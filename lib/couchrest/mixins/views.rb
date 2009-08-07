@@ -137,7 +137,11 @@ module CouchRest
                 collection_proxy_for(design_doc, name, opts.merge({:include_docs => true}))
               else
                 view = fetch_view db, name, opts.merge({:include_docs => true}), &block
-                view['rows'].collect{|r|new(r['doc'])} if view['rows']
+                view['rows'].collect do |r| 
+                  record = new(r['doc'])
+                  record.changed_properties = {}
+                  record
+                end if view['rows']
               end
             rescue
               # fallback for old versions of couchdb that don't 

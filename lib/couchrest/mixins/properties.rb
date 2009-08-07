@@ -116,9 +116,11 @@ module CouchRest
           def define_property(name, options={})
             # check if this property is going to casted
             options[:casted] = options[:cast_as] ? options[:cast_as] : false
+            
             property = CouchRest::Property.new(name, (options.delete(:cast_as) || options.delete(:type)), options)
             create_property_getter(property) 
             create_property_setter(property) unless property.read_only == true
+            create_changed_method(property) unless property.read_only == true
             properties << property
           end
           
@@ -155,6 +157,13 @@ module CouchRest
             meth = property.name
             class_eval <<-EOS
               def #{meth}=(value)
+                if self.keys.include?('#{meth}') && self['#{meth}'] != value
+                  changed_properties['#{meth}'.to_sym] = self['#{meth}']
+                elsif !self.keys.include?('#{meth}')
+                  changed_properties['#{meth}'.to_sym] = nil
+                else
+                  # nothing to do
+                end
                 self['#{meth}'] = value
               end
             EOS
@@ -164,6 +173,16 @@ module CouchRest
                 alias #{property.alias.to_sym}= #{meth.to_sym}=
               EOS
             end
+          end
+
+          # defines the setter for the property (and optional aliases)
+          def create_changed_method(property)
+            meth = property.name
+            class_eval <<-EOS
+              def #{meth}_changed?
+                @changed_properties.include?('#{meth}'.to_sym)
+              end
+            EOS
           end
           
       end # module ClassMethods

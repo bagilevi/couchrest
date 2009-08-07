@@ -197,7 +197,11 @@ module CouchRest
           if @container_class.nil?
             results
           else
-            results['rows'].collect { |row| @container_class.new(row['doc']) } unless results['rows'].nil?
+            results['rows'].collect do |row| 
+              container = @container_class.new(row['doc']) 
+              container.changed_properties = {}
+              container
+            end unless results['rows'].nil?
           end
         end
 

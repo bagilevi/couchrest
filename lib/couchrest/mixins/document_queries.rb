@@ -55,7 +55,9 @@ module CouchRest
           rescue
             nil
           else
-            new(doc)
+            new_doc = new(doc)
+            new_doc.changed_properties = {} # defined in properties to detect changes
+            new_doc
           end
         end
         

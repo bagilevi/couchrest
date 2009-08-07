@@ -7,10 +7,12 @@ module CouchRest
     def self.included(base)
       base.send(:include, ::CouchRest::Mixins::Properties)
       base.send(:attr_accessor, :casted_by)
+      base.send(:attr_accessor, :changed_properties)
     end
     
     def initialize(keys={})
       raise StandardError unless self.is_a? Hash
+      @changed_properties = {}
       apply_defaults # defined in CouchRest::Mixins::Properties
       super()
       keys.each do |k,v|

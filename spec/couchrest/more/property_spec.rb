@@ -4,6 +4,7 @@ require File.join(FIXTURE_PATH, 'more', 'card')
 require File.join(FIXTURE_PATH, 'more', 'invoice')
 require File.join(FIXTURE_PATH, 'more', 'service')
 require File.join(FIXTURE_PATH, 'more', 'event')
+require File.join(FIXTURE_PATH, 'more', 'location')
 
 
 describe "ExtendedDocument properties" do
@@ -190,6 +191,161 @@ describe "ExtendedDocument properties" do
       end
     end
 
+  end
+  describe "detecting changes" do 
+
+    describe "new record with fields" do
+      before(:each) do
+        @service = Service.new(:name => "Coumpound analysis", :price => 3_000)
+      end
+
+      describe "initializing" do
+        it "should have all passed_keys as changed properties" do
+          @service.changed_properties.keys.should_not be_empty
+          @service.changed_properties.keys.should include(:name)
+          @service.changed_properties.keys.should include(:price)
+        end
+      end
+      
+      describe "initializing with defaults" do
+        before(:each) do
+          @location = Location.new
+        end
+        it "should have all passed_keys as changed properties" do
+          @location.changed_properties.keys.should be_empty
+        end
+      end
+      
+      describe "saving" do
+
+        it "should not have changed properties after save" do
+          @service.save
+          @service.changed_properties.should be_empty
+        end
+
+      end
+      
+    end
+
+    describe "new record without fields" do
+      before(:each) do
+        @service = Service.new
+      end
+      
+      describe "initializing" do
+        it "should have all passed_keys as changed properties" do
+          @service.changed_properties.keys.should be_empty
+        end
+      end
+      
+    end
+
+    describe "existing record" do
+      
+      before(:each) do
+        @service = Service.new(:name => "Coumpound analysis", :price => 3_000)
+        @service.save
+      end
+
+      describe "getting a record" do
+        it "should hasn't changed properties" do
+          s = Service.get(@service['_id'])
+          s.changed_properties.keys.should be_empty
+        end
+      end
+
+
+      describe "changing attributes" do
+        it "should know the changed attribute" do
+          @service.name = "New name"
+          @service.changed_properties.keys.should include(:name)
+          @service.changed_properties.keys.should_not include(:price)
+        end
+      end
+      
+      describe "updating with update method" do
+        it "should know the changed attribute" do
+          @service.update_attributes_without_saving(:name => "New name")
+          @service.changed_properties.keys.should include(:name)
+          @service.changed_properties.keys.should_not include(:price)
+        end
+      end
+
+      describe "several records" do
+        before(:each) do
+          @service1 = Service.new(:name => "Coumpound analysis", :price => 3_000).save
+          @service2 = Service.new(:name => "Another analysis", :price => 4_000).save
+          @service3 = Service.new(:name => "No analysis", :price => 1_000).save
+          
+        end
+        it "should has not changed_properties each result" do
+          Service.all.each do |service|
+            service.changed_properties.keys.should be_empty
+          end
+        end
+      end
+
+    end
+
+  end
+  describe "preserving properties old values before save" do 
+
+    before(:each) do
+      @service = Service.new(:name => "Coumpound analysis", :price => 3_000)
+    end
+
+    describe "new record" do
+      describe "initializing" do
+        it "should have all passed_keys as changed properties" do
+          @service.changed_properties[:name].should == nil
+          @service.changed_properties[:price].should == nil
+        end
+      end
+      
+      describe "initializing with defaults" do
+        before(:each) do
+          @location = Location.new
+        end
+        it "should have all passed_keys as changed properties" do
+          @service.changed_properties[:city].should == nil
+          @service.changed_properties[:state].should == nil
+          @service.changed_properties[:zip].should == nil
+        end
+      end
+      
+    end
+
+    describe "existing record" do
+      
+      before(:each) do
+        @service = Service.new(:name => "Coumpound analysis", :price => 3_000)
+        @service.save
+      end
+      describe "changing attributes" do
+        it "should know the changed attribute" do
+          @service.name = "New name"
+          @service.changed_properties[:name].should == "Coumpound analysis"
+          @service.changed_properties[:price].should be_nil
+        end
+      end
+
+    end
+
+  end
+  describe "field_changed? method helpers" do
+    before(:each) do
+      @service = Service.new(:name => "Coumpound analysis", :price => 3_000)
+      @service.save
+    end
+    it "should respond to field_changed? for all properties" do
+      @service.respond_to?(:name_changed?).should be_true
+      @service.respond_to?(:price_changed?).should be_true
+    end
+    it "should know if a field was changed via field_changed? method" do
+      @service.name = "New name"
+      @service.name_changed?.should be_true
+      @service.price_changed?.should be_false
+    end
   end
   
 end

@@ -31,6 +31,7 @@ module CouchRest
     
     # Accessors
     attr_accessor :casted_by
+    attr_accessor :changed_properties
     
     # Callbacks
     define_callbacks :create
@@ -39,6 +40,7 @@ module CouchRest
     define_callbacks :destroy
     
     def initialize(passed_keys={})
+      @changed_properties = {}
       apply_defaults # defined in CouchRest::Mixins::Properties
       passed_keys.each do |k,v|
         if self.respond_to?("#{k}=")
@@ -172,6 +174,7 @@ module CouchRest
       raise ArgumentError, "a document requires a database to be created to (The document or the #{self.class} default database were not set)" unless database
       set_unique_id if new_document? && self.respond_to?(:set_unique_id)
       result = database.save_doc(self, bulk)
+      @changed_properties = {} if result["ok"] == true
       (result["ok"] == true) ? self : false
     end
     
@@ -217,6 +220,7 @@ module CouchRest
       raise ArgumentError, "a document requires a database to be saved to (The document or the #{self.class} default database were not set)" unless database
       set_unique_id if new_document? && self.respond_to?(:set_unique_id)
       result = database.save_doc(self, bulk)
+      @changed_properties = {} if result["ok"] == true
       result["ok"] == true
     end
     
