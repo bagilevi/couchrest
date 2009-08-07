@@ -120,7 +120,6 @@ module CouchRest
             property = CouchRest::Property.new(name, (options.delete(:cast_as) || options.delete(:type)), options)
             create_property_getter(property) 
             create_property_setter(property) unless property.read_only == true
-            create_changed_method(property) unless property.read_only == true
             properties << property
           end
           
@@ -153,37 +152,38 @@ module CouchRest
           end
 
           # defines the setter for the property (and optional aliases)
+          # handles the changed_properties and add the field_changed? method with optional aliases
           def create_property_setter(property)
             meth = property.name
+            changed_properties_meth_alias = "changed_properties['#{property.alias.to_sym}'.to_sym] = changed_properties['#{meth.to_sym}']" if property.alias
             class_eval <<-EOS
               def #{meth}=(value)
                 if self.keys.include?('#{meth}') && self['#{meth}'] != value
                   changed_properties['#{meth}'.to_sym] = self['#{meth}']
+                  #{changed_properties_meth_alias}
                 elsif !self.keys.include?('#{meth}')
                   changed_properties['#{meth}'.to_sym] = nil
+                  #{changed_properties_meth_alias}
                 else
                   # nothing to do
                 end
                 self['#{meth}'] = value
               end
-            EOS
-
-            if property.alias
-              class_eval <<-EOS
-                alias #{property.alias.to_sym}= #{meth.to_sym}=
-              EOS
-            end
-          end
-
-          # defines the setter for the property (and optional aliases)
-          def create_changed_method(property)
-            meth = property.name
-            class_eval <<-EOS
               def #{meth}_changed?
                 @changed_properties.include?('#{meth}'.to_sym)
               end
             EOS
+
+            if property.alias
+              changed_method = "#{meth}_changed?"
+              changed_method_alias = "#{property.alias}_changed?"
+              class_eval <<-EOS
+                alias #{property.alias.to_sym}= #{meth.to_sym}=
+                alias #{changed_method_alias.to_sym} #{changed_method.to_sym}
+              EOS
+            end
           end
+
           
       end # module ClassMethods
       

@@ -8,7 +8,7 @@ class Location < CouchRest::ExtendedDocument
   use_database TEST_SERVER.default_database
   
   # Official Schema
-  property :city, :default => "Ciudad de Buenos Aires"
+  property :city, :default => "Ciudad de Buenos Aires", :alias     => :town
   property :state, :default => "Buenos Aires"
   property :zip
   

@@ -330,6 +330,15 @@ describe "ExtendedDocument properties" do
       end
 
     end
+    
+    describe "dealing with alias" do
+      before(:each) do
+        @location = Location.new(:city => "Malaga")
+      end
+      it "should include the alias in the changed properties" do
+        @location.changed_properties.keys.should include(:town)
+      end
+    end
 
   end
   describe "field_changed? method helpers" do
@@ -345,6 +354,14 @@ describe "ExtendedDocument properties" do
       @service.name = "New name"
       @service.name_changed?.should be_true
       @service.price_changed?.should be_false
+    end
+    describe "with aliases" do
+      before(:each) do
+        @location = Location.new(:city => "Malaga")
+      end
+      it "should respond to alias_changed?" do
+        @location.town_changed?.should be_true
+      end
     end
   end
   
