@@ -109,6 +109,12 @@ module CouchRest
           end
         end
         
+        # return an array with the names of the properties (aliases not included)
+        def property_names
+          self.properties.map { |p| p.name }
+        end
+        
+        
         protected
         
           # This is not a thread safe operation, if you have to set new properties at runtime

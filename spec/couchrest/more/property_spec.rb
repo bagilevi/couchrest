@@ -365,4 +365,10 @@ describe "ExtendedDocument properties" do
     end
   end
   
+  describe "accessing property names" do
+    it "should return the property names of document" do
+      Location.property_names.should == ['city', 'state', 'zip', 'updated_at', 'created_at']
+    end
+  end
+  
 end
