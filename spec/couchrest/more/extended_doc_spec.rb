@@ -25,6 +25,8 @@ describe "ExtendedDocument" do
     property :run_after_create
     property :run_before_update
     property :run_after_update
+    property :run_before_validate
+    property :run_after_validate
     
     save_callback :before do |object| 
       object.run_before_save = true
@@ -44,6 +46,24 @@ describe "ExtendedDocument" do
     update_callback :after do |object| 
       object.run_after_update = true
     end
+  end
+  
+  class WithCallBacksAndValidation < CouchRest::ExtendedDocument
+    use_database TEST_SERVER.default_database
+    property :name
+    property :run_before_validate
+    property :run_after_validate
+
+    # Include the validation module to get access to the validation methods
+    include CouchRest::Validation
+
+    validate_callback :before do |object| 
+      object.run_before_validate = true
+    end
+    validate_callback :after do |object| 
+      object.run_after_validate = true
+    end
+    
   end
   
   class WithTemplateAndUniqueID < CouchRest::ExtendedDocument
@@ -525,6 +545,18 @@ describe "ExtendedDocument" do
     
     before(:each) do
       @doc = WithCallBacks.new
+    end
+
+    describe "validate" do
+      before(:each) do
+        @validatable_doc = WithCallBacksAndValidation.new
+      end
+
+      it "should run the after filter after validating" do
+        @validatable_doc.run_after_validate.should be_nil
+        @validatable_doc.valid?.should be_true
+        @validatable_doc.run_after_validate.should be_true
+      end
     end
     
     describe "save" do

@@ -43,6 +43,7 @@ require File.join(dir, 'validators', 'format_validator')
 require File.join(dir, 'validators', 'length_validator')
 require File.join(dir, 'validators', 'numeric_validator')
 require File.join(dir, 'validators', 'method_validator')
+require File.join(dir, 'validators', 'uniqueness_validator')
 require File.join(dir, 'validators', 'confirmation_validator')
 
 module CouchRest
@@ -72,6 +73,9 @@ module CouchRest
       
       base.extend(ClassMethods)
       base.class_eval <<-EOS, __FILE__, __LINE__
+        if method_defined?(:run_callbacks)
+          define_callbacks :validate
+        end
         if method_defined?(:_run_save_callbacks)
           save_callback :before, :check_validations
         end
@@ -115,6 +119,17 @@ module CouchRest
     # Check if a resource is valid in a given context
     #
     def valid?(context = :default)
+      if self.respond_to?(:_run_validate_callbacks)
+        _run_validate_callbacks do
+          validate_without_callbacks(context)
+        end
+      else
+        validate_without_callbacks(context)
+      end
+    end
+
+    # to keep it dry
+    def validate_without_callbacks(context = :default)
       result = self.class.validators.execute(context, self)
       result && validate_casted_arrays
     end
@@ -180,7 +195,7 @@ module CouchRest
       include CouchRest::Validation::ValidatesIsNumber
       include CouchRest::Validation::ValidatesWithMethod
       # include CouchRest::Validation::ValidatesWithBlock
-      # include CouchRest::Validation::ValidatesIsUnique
+      include CouchRest::Validation::ValidatesIsUnique
       include CouchRest::Validation::AutoValidate
       
       # Return the set of contextual validators or create a new one
