@@ -40,6 +40,7 @@ module CouchRest
         :accepted  => "%s is not accepted",
         :nil => '%s must not be nil',
         :blank => '%s must not be blank',
+        :exists => '%s already taken',
         :length_between => '%s must be between %s and %s characters long',
         :too_long => '%s must be less than %s characters long',
         :too_short => '%s must be more than %s characters long',
