@@ -28,7 +28,7 @@ module CouchRest
       class IncludeError < StandardError; end
       
       def self.included(base)
-        base.class_eval <<-EOS, __FILE__, __LINE__
+        base.class_eval <<-EOS, __FILE__, __LINE__ + 1
             extlib_inheritable_accessor(:properties) unless self.respond_to?(:properties)
             self.properties ||= []
         EOS
@@ -37,7 +37,7 @@ module CouchRest
       end
       
       def apply_defaults
-        return if self.respond_to?(:new_document?) && (new_document? == false)
+        return if self.respond_to?(:new?) && (new? == false)
         return unless self.class.respond_to?(:properties) 
         return if self.class.properties.empty?
         # TODO: cache the default object
@@ -57,48 +57,74 @@ module CouchRest
       def cast_keys
         return unless self.class.properties
         self.class.properties.each do |property|
-          next unless property.casted
-          key = self.has_key?(property.name) ? property.name : property.name.to_sym
-          # Don't cast the property unless it has a value
-          next unless self[key]   
-          target = property.type
-          if target.is_a?(Array)
-            klass = ::CouchRest.constantize(target[0])
-            self[property.name] = self[key].collect do |value|
-              # Auto parse Time objects
-              obj = ( (property.init_method == 'new') && klass == Time) ? Time.parse(value) : klass.send(property.init_method, value)
-              obj.casted_by = self if obj.respond_to?(:casted_by)
-              obj 
-            end
-          else
-            # Auto parse Time objects
-            self[property.name] = if ((property.init_method == 'new') && target == 'Time')
-              # Using custom time parsing method because Ruby's default method is toooo slow 
-              self[key].is_a?(String) ? Time.mktime_with_offset(self[key].dup) : self[key]
-            # Float instances don't get initialized with #new
-            elsif ((property.init_method == 'new') && target == 'Float')
-              cast_float(self[key])
-            # 'boolean' type is simply used to generate a property? accessor method
-            elsif ((property.init_method == 'new') && target == 'boolean')
-              self[key]
-            else
-              # Let people use :send as a Time parse arg
-              klass = ::CouchRest.constantize(target)
-              klass.send(property.init_method, self[key].dup)   
-            end  
-            self[property.name].casted_by = self if self[property.name].respond_to?(:casted_by)
-          end 
-          
+          cast_property(property)
         end
-        
-        def cast_float(value)
-          begin 
-            Float(value)
-          rescue 
+      end
+      
+      def cast_property(property, assigned=false)
+        return unless property.casted
+        key = self.has_key?(property.name) ? property.name : property.name.to_sym
+        # Don't cast the property unless it has a value
+        return unless self[key]
+        if property.type.is_a?(Array)
+          klass = ::CouchRest.constantize(property.type[0])
+          arr = self[key].dup.collect do |value|
+            unless value.instance_of?(klass)
+              value = convert_property_value(property, klass, value)
+            end
+            associate_casted_to_parent(value, assigned)
             value
           end
+          self[key] = klass != String ? CastedArray.new(arr) : arr
+          self[key].casted_by = self if self[key].respond_to?(:casted_by)
+        else
+          if property.type == 'boolean'
+            klass = TrueClass
+          else
+            klass = ::CouchRest.constantize(property.type)
+          end
+          
+          unless self[key].instance_of?(klass)
+            self[key] = convert_property_value(property, klass, self[property.name])
+          end
+          associate_casted_to_parent(self[property.name], assigned)
         end
         
+      end
+      
+      def associate_casted_to_parent(casted, assigned)
+        casted.casted_by = self if casted.respond_to?(:casted_by)
+        casted.document_saved = true if !assigned && casted.respond_to?(:document_saved)
+      end
+      
+      def convert_property_value(property, klass, value)
+        if ((property.init_method == 'new') && klass == Time)
+          # Using custom time parsing method because Ruby's default method is toooo slow
+          value.is_a?(String) ? Time.mktime_with_offset(value.dup) : value
+        # Float instances don't get initialized with #new
+        elsif ((property.init_method == 'new') && klass == Float)
+          cast_float(value)
+          # 'boolean' type is simply used to generate a property? accessor method
+        elsif ((property.init_method == 'new') && klass == TrueClass)
+          value
+        else
+          klass.send(property.init_method, value.dup)
+        end
+      end
+      
+      def cast_property_by_name(property_name)
+        return unless self.class.properties
+        property = self.class.properties.detect{|property| property.name == property_name}
+        return unless property
+        cast_property(property, true)
+      end
+      
+      def cast_float(value)
+        begin 
+          Float(value)
+        rescue
+          value
+        end
       end
       
       module ClassMethods
@@ -133,7 +159,7 @@ module CouchRest
           # defines the getter for the property (and optional aliases)
           def create_property_getter(property)
             # meth = property.name
-            class_eval <<-EOS, __FILE__, __LINE__
+            class_eval <<-EOS, __FILE__, __LINE__ + 1
               def #{property.name}
                 self['#{property.name}']
               end
@@ -152,7 +178,7 @@ module CouchRest
             end
 
             if property.alias
-              class_eval <<-EOS, __FILE__, __LINE__
+              class_eval <<-EOS, __FILE__, __LINE__ + 1
                 alias #{property.alias.to_sym} #{property.name.to_sym}
               EOS
             end
@@ -163,6 +189,7 @@ module CouchRest
           def create_property_setter(property)
             meth = property.name
             changed_properties_meth_alias = "changed_properties['#{property.alias.to_sym}'.to_sym] = changed_properties['#{meth.to_sym}']" if property.alias
+            property_name = property.name
             class_eval <<-EOS
               def #{meth}=(value)
                 if self.keys.include?('#{meth}') && self['#{meth}'] != value
@@ -175,22 +202,22 @@ module CouchRest
                   # nothing to do
                 end
                 self['#{meth}'] = value
+                cast_property_by_name('#{property_name}')
               end
               def #{meth}_changed?
                 @changed_properties.include?('#{meth}'.to_sym)
               end
             EOS
 
-            if property.alias
-              changed_method = "#{meth}_changed?"
-              changed_method_alias = "#{property.alias}_changed?"
-              class_eval <<-EOS
-                alias #{property.alias.to_sym}= #{meth.to_sym}=
-                alias #{changed_method_alias.to_sym} #{changed_method.to_sym}
-              EOS
-            end
+          if property.alias
+            changed_method = "#{meth}_changed?"
+            changed_method_alias = "#{property.alias}_changed?"
+            class_eval <<-EOS
+              alias #{property.alias.to_sym}= #{property_name.to_sym}=
+              alias #{changed_method_alias.to_sym} #{changed_method.to_sym}
+            EOS
           end
-
+        end
           
       end # module ClassMethods
       

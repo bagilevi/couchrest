@@ -1,14 +1,5 @@
 module CouchRest
   module Mixins
-    module PaginatedResults
-      def amount_pages
-        @amount_pages ||= 0
-      end   
-      def amount_pages=(value)
-        @amount_pages = value
-      end               
-    end
-    
     module Collection
   
       def self.included(base)
@@ -93,8 +84,6 @@ module CouchRest
         DEFAULT_PAGE = 1
         DEFAULT_PER_PAGE = 30
         
-        attr_accessor :amount_pages
-
         # Create a new CollectionProxy to represent the specified view.  If a
         # container class is specified, the proxy will create an object of the
         # given type for each row that comes back from the view.  If no
@@ -122,11 +111,8 @@ module CouchRest
         def paginate(options = {})
           page, per_page = parse_options(options)
           results = @database.view(@view_name, pagination_options(page, per_page)) 
-          @amount_pages ||= (results['total_rows'].to_f / per_page.to_f).ceil
           remember_where_we_left_off(results, page)
           results = convert_to_container_array(results)
-          results.extend(PaginatedResults)
-          results.amount_pages = @amount_pages
           results
         end
 
@@ -208,8 +194,9 @@ module CouchRest
         def pagination_options(page, per_page)
           view_options = @view_options.clone
           if @last_key && @last_docid && @last_page == page - 1
-            view_options.delete(:key)
-            options = { :startkey => @last_key, :startkey_docid => @last_docid, :limit => per_page, :skip => 1 }
+            key = view_options.delete(:key)
+            end_key = view_options[:endkey] || key
+            options = { :startkey => @last_key, :endkey => end_key, :startkey_docid => @last_docid, :limit => per_page, :skip => 1 }
           else
             options = { :limit => per_page, :skip => per_page * (page - 1) }
           end

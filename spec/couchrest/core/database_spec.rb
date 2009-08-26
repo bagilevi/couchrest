@@ -247,7 +247,7 @@ describe CouchRest::Database do
   describe "PUT attachment from file" do
     before(:each) do
       filename = FIXTURE_PATH + '/attachments/couchdb.png'
-      @file = File.open(filename)
+      @file = File.open(filename, "rb")
     end
     after(:each) do
       @file.close
@@ -548,7 +548,7 @@ describe CouchRest::Database do
         newdoc['artist'].should == 'Zappa'
       end
       it "should fail without an _id" do
-        lambda{@db.copy({"not"=>"a real doc"})}.should raise_error(ArgumentError)
+        lambda{@db.copy_doc({"not"=>"a real doc"})}.should raise_error(ArgumentError)
       end
     end
     describe "to an existing location" do

@@ -21,7 +21,7 @@ module CouchRest
     
     def self.inherited(subklass)
       subklass.send(:include, CouchRest::Mixins::Properties)
-      subklass.class_eval <<-EOS, __FILE__, __LINE__
+      subklass.class_eval <<-EOS, __FILE__, __LINE__ + 1
         def self.inherited(subklass)
           subklass.properties = self.properties.dup
         end
@@ -34,10 +34,10 @@ module CouchRest
     attr_accessor :changed_properties
     
     # Callbacks
-    define_callbacks :create
-    define_callbacks :save
-    define_callbacks :update
-    define_callbacks :destroy
+    define_callbacks :create, "result == :halt"
+    define_callbacks :save, "result == :halt"
+    define_callbacks :update, "result == :halt"
+    define_callbacks :destroy, "result == :halt"
     
     def initialize(passed_keys={})
       @changed_properties = {}
@@ -78,17 +78,17 @@ module CouchRest
     # on the document whenever saving occurs. CouchRest uses a pretty
     # decent time format by default. See Time#to_json
     def self.timestamps!
-      class_eval <<-EOS, __FILE__, __LINE__
+      class_eval <<-EOS, __FILE__, __LINE__ + 1
         property(:updated_at, :read_only => true, :cast_as => 'Time', :auto_validation => false)
         property(:created_at, :read_only => true, :cast_as => 'Time', :auto_validation => false)
         
-        save_callback :before do |object|
+        set_callback :save, :before do |object|
           object['updated_at'] = Time.now
-          object['created_at'] = object['updated_at'] if object.new_document?
+          object['created_at'] = object['updated_at'] if object.new?
         end
       EOS
     end
-  
+    
     # Name a method that will be called before the document is first saved,
     # which returns a string to be used for the document's <tt>_id</tt>.
     # Because CouchDB enforces a constraint that each id must be unique,
@@ -130,17 +130,36 @@ module CouchRest
       self.class.properties
     end
     
+    # Gets a reference to the actual document in the DB
+    # Calls up to the next document if there is one,
+    # Otherwise we're at the top and we return self
+    def base_doc
+      return self if base_doc?
+      @casted_by.base_doc
+    end
+    
+    # Checks if we're the top document
+    def base_doc?
+      !@casted_by
+    end
+    
     # Takes a hash as argument, and applies the values by using writer methods
     # for each key. It doesn't save the document at the end. Raises a NoMethodError if the corresponding methods are
     # missing. In case of error, no attributes are changed.    
     def update_attributes_without_saving(hash)
-      hash.each do |k, v|
+      # remove attributes that cannot be updated, silently ignoring them
+      # which matches Rails behavior when, for instance, setting created_at.
+      # make a copy, we don't want to change arguments
+      attrs = hash.dup
+      %w[_id _rev created_at updated_at].each {|attr| attrs.delete(attr)}
+      attrs.each do |k, v|
         raise NoMethodError, "#{k}= method not available, use property :#{k}" unless self.respond_to?("#{k}=")
       end      
-      hash.each do |k, v|
+      attrs.each do |k, v|
         self.send("#{k}=",v)
       end
     end
+    alias :attributes= :update_attributes_without_saving
 
     # Takes a hash as argument, and applies the values by using writer methods
     # for each key. Raises a NoMethodError if the corresponding methods are
@@ -151,7 +170,8 @@ module CouchRest
     end
 
     # for compatibility with old-school frameworks
-    alias :new_record? :new_document?
+    alias :new_record? :new?
+    alias :new_document? :new?
     
     # Trigger the callbacks (before, after, around)
     # and create the document
@@ -172,7 +192,7 @@ module CouchRest
     # unlike save, create returns the newly created document
     def create_without_callbacks(bulk =false)
       raise ArgumentError, "a document requires a database to be created to (The document or the #{self.class} default database were not set)" unless database
-      set_unique_id if new_document? && self.respond_to?(:set_unique_id)
+      set_unique_id if new? && self.respond_to?(:set_unique_id)
       result = database.save_doc(self, bulk)
       @changed_properties = {} if result["ok"] == true
       (result["ok"] == true) ? self : false
@@ -188,7 +208,7 @@ module CouchRest
     # only if the document isn't new
     def update(bulk = false)
       caught = catch(:halt)  do
-        if self.new_document?
+        if self.new?
           save(bulk)
         else
           _run_update_callbacks do
@@ -204,7 +224,7 @@ module CouchRest
     # and save the document
     def save(bulk = false)
       caught = catch(:halt)  do
-        if self.new_document?
+        if self.new?
           _run_save_callbacks do
             save_without_callbacks(bulk)
           end
@@ -218,10 +238,12 @@ module CouchRest
     # Returns a boolean value
     def save_without_callbacks(bulk = false)
       raise ArgumentError, "a document requires a database to be saved to (The document or the #{self.class} default database were not set)" unless database
-      set_unique_id if new_document? && self.respond_to?(:set_unique_id)
+      set_unique_id if new? && self.respond_to?(:set_unique_id)
       result = database.save_doc(self, bulk)
       @changed_properties = {} if result["ok"] == true
       result["ok"] == true
+      mark_as_saved 
+      true
     end
     
     # Saves the document to the db using save. Raises an exception
@@ -242,6 +264,23 @@ module CouchRest
             self.delete('_id')
           end
           result['ok']
+        end
+      end
+    end
+    
+    protected
+    
+    # Set document_saved flag on all casted models to true
+    def mark_as_saved
+      self.each do |key, prop|
+        if prop.is_a?(Array)
+          prop.each do |item|
+            if item.respond_to?(:document_saved)
+              item.send(:document_saved=, true)
+            end
+          end
+        elsif prop.respond_to?(:document_saved)
+          prop.send(:document_saved=, true)
         end
       end
     end
