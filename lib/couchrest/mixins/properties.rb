@@ -2,22 +2,25 @@ require 'time'
 require File.join(File.dirname(__FILE__), '..', 'more', 'property')
 
 class Time                       
-  # returns a local time value much faster than Time.parse
+  # returns a local time value much faster than Time.parse in some cases
   def self.mktime_with_offset(string)
-    string =~ /(\d{4})\/(\d{2})\/(\d{2}) (\d{2}):(\d{2}):(\d{2}) ([\+\-])(\d{2})/
-    # $1 = year
-    # $2 = month
-    # $3 = day
-    # $4 = hours
-    # $5 = minutes
-    # $6 = seconds
-    # $7 = time zone direction
-    # $8 = tz difference
-    # utc time with wrong TZ info: 
-    time = mktime($1, RFC2822_MONTH_NAME[$2.to_i - 1], $3, $4, $5, $6, $7)
-    tz_difference = ("#{$7 == '-' ? '+' : '-'}#{$8}".to_i * 3600)
-    tz_offset = zone_offset(time.zone) || 0
-    time + tz_difference + tz_offset
+    if string =~ /(\d{4})\/(\d{2})\/(\d{2}) (\d{2}):(\d{2}):(\d{2}) ([\+\-])(\d{2})/ then
+      # $1 = year
+      # $2 = month
+      # $3 = day
+      # $4 = hours
+      # $5 = minutes
+      # $6 = seconds
+      # $7 = time zone direction
+      # $8 = tz difference
+      # utc time with wrong TZ info: 
+      time = mktime($1, RFC2822_MONTH_NAME[$2.to_i - 1], $3, $4, $5, $6, $7)
+      tz_difference = ("#{$7 == '-' ? '+' : '-'}#{$8}".to_i * 3600)
+      tz_offset = zone_offset(time.zone) || 0
+      time + tz_difference + tz_offset
+    else
+      Time.parse string
+    end
   end 
 end
 
