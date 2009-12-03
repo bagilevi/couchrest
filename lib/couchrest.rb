@@ -135,7 +135,7 @@ module CouchRest
     # returns it after it's been created
     def database! url
       parsed = parse url
-      cr = CouchRest.new(parsed[:host])
+      cr = CouchRest.new("http://" + parsed[:host])
       cr.database!(parsed[:database])
     end
   
